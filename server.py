@@ -3,11 +3,13 @@ import pickle
 import numpy as np
 import face_recognition
 from flask import Flask, jsonify, request, redirect
+from flask_cors import CORS
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
+CORS(app)
 
 # Path to the file where we'll store face encodings
 KNOWN_FACES_FILE = 'known_faces.dat'
