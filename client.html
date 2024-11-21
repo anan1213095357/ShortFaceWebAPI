@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>人脸识别应用</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    
+    <style>
+        /* 自定义样式 */
+        #video, #videoRecognize {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 1px solid black;
+        }
+        #canvas, #canvasRecognize {
+            display: none;
+        }
+        #result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏或选项卡切换注册和识别模式 -->
+    <div class="container">
+        <h1 class="text-center mt-4">人脸识别应用</h1>
+        <ul class="nav nav-tabs" id="modeTabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="register-tab" data-toggle="tab" href="#register" role="tab" aria-controls="register" aria-selected="true">注册</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="recognize-tab" data-toggle="tab" href="#recognize" role="tab" aria-controls="recognize" aria-selected="false">识别</a>
+            </li>
+        </ul>
+        <div class="tab-content" id="modeTabsContent">
+            <!-- 注册选项卡 -->
+            <div class="tab-pane fade show active" id="register" role="tabpanel" aria-labelledby="register-tab">
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas" width="640" height="480"></canvas>
+                        <button id="captureButton" class="btn btn-primary mt-2">拍照并注册</button>
+                        <div id="registerResult" class="mt-2"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <form id="registerForm">
+                            <div class="form-group">
+                                <label for="nameInput">姓名：</label>
+                                <input type="text" class="form-control" id="nameInput" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="ageInput">年龄：</label>
+                                <input type="text" class="form-control" id="ageInput">
+                            </div>
+                            <div class="form-group">
+                                <label for="emailInput">邮箱：</label>
+                                <input type="email" class="form-control" id="emailInput">
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <!-- 识别选项卡 -->
+            <div class="tab-pane fade" id="recognize" role="tabpanel" aria-labelledby="recognize-tab">
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <video id="videoRecognize" autoplay playsinline></video>
+                        <canvas id="canvasRecognize" width="640" height="480"></canvas>
+                        <div id="recognizeResult" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入必要的脚本 -->
+    <!-- jQuery, Popper.js, Bootstrap JS 用于选项卡功能 -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+    <!-- 自定义脚本 -->
+    <script>
+        // 公共变量
+        let videoStream = null;
+
+        // 注册模式变量
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('captureButton');
+        const nameInput = document.getElementById('nameInput');
+        const ageInput = document.getElementById('ageInput');
+        const emailInput = document.getElementById('emailInput');
+        const registerResult = document.getElementById('registerResult');
+
+        // 识别模式变量
+        const videoRecognize = document.getElementById('videoRecognize');
+        const canvasRecognize = document.getElementById('canvasRecognize');
+        const recognizeResult = document.getElementById('recognizeResult');
+
+        let recognitionActive = false;
+
+        // 当选项卡显示时启动视频流
+        $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            var target = $(e.target).attr("href"); // 激活的选项卡
+            if (target === '#register') {
+                startVideoStream(video);
+            } else if (target === '#recognize') {
+                startVideoStream(videoRecognize);
+                startRecognition();
+            }
+        });
+
+        // 启动视频流的函数
+        function startVideoStream(videoElement) {
+            if (navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function (stream) {
+                        videoStream = stream;
+                        videoElement.srcObject = stream;
+                    })
+                    .catch(function (error) {
+                        console.log("访问摄像头时出错！");
+                    });
+            }
+        }
+
+        // 停止视频流的函数
+        function stopVideoStream() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(function(track) {
+                    track.stop();
+                });
+                videoStream = null;
+            }
+        }
+
+        // 处理注册按钮点击事件
+        captureButton.addEventListener('click', function () {
+            // 验证表单输入
+            if (!nameInput.value) {
+                alert("请输入您的姓名。");
+                return;
+            }
+
+            // 从视频中捕获照片
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // 将图像转换为 Blob
+            canvas.toBlob(function(blob) {
+                // 准备表单数据
+                const formData = new FormData();
+                formData.append('file', blob, 'capture.jpg');
+                formData.append('name', nameInput.value);
+                formData.append('age', ageInput.value);
+                formData.append('email', emailInput.value);
+
+                // 发送 AJAX 请求到 /register
+                fetch('http://anan1213.tpddns.cn:5001/register', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    registerResult.innerText = data.message || data.error;
+                    registerResult.style.color = data.error ? 'red' : 'green';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    registerResult.innerText = '注册过程中发生错误。';
+                    registerResult.style.color = 'red';
+                });
+            }, 'image/jpeg');
+        });
+
+        function startRecognition() {
+            recognitionActive = true;
+
+            function recognizeLoop() {
+                if (!recognitionActive) {
+                    return;
+                }
+
+                // 捕获当前帧
+                const context = canvasRecognize.getContext('2d');
+                context.drawImage(videoRecognize, 0, 0, canvasRecognize.width, canvasRecognize.height);
+
+                // 将图像转换为 Blob
+                canvasRecognize.toBlob(function(blob) {
+                    // 准备表单数据
+                    const formData = new FormData();
+                    formData.append('file', blob, 'frame.jpg');
+
+                    // 发送 AJAX 请求到 /recognize
+                    fetch('http://anan1213.tpddns.cn:5001/recognize', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // 显示结果
+                        if (data.identity && data.identity !== "Unknown") {
+                            recognizeResult.innerHTML = `<p><strong>姓名：</strong> ${data.identity}</p>
+                            <p><strong>年龄：</strong> ${data.age || '未知'}</p>
+                            <p><strong>邮箱：</strong> ${data.email || '未知'}</p>`;
+                        } else {
+                            recognizeResult.innerHTML = `<p><strong>身份：</strong> 未知</p>`;
+                        }
+
+                        // 在延迟后进行下一次识别
+                        if (recognitionActive) {
+                            setTimeout(recognizeLoop, 200);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        recognizeResult.innerText = '识别过程中发生错误。';
+                        recognizeResult.style.color = 'red';
+
+                        // 即使发生错误，也继续
+                        if (recognitionActive) {
+                            setTimeout(recognizeLoop, 200);
+                        }
+                    });
+                }, 'image/jpeg');
+            }
+
+            recognizeLoop();
+        }
+
+        // 当选项卡隐藏时停止识别
+        $('a[data-toggle="tab"]').on('hidden.bs.tab', function (e) {
+            var target = $(e.target).attr("href"); // 被隐藏的选项卡
+            if (target === '#recognize') {
+                recognitionActive = false;
+                stopVideoStream();
+            } else if (target === '#register') {
+                stopVideoStream();
+            }
+        });
+
+        // 为默认激活的选项卡启动视频流
+        $(document).ready(function() {
+            var activeTab = $('.nav-tabs .active').attr('href');
+            if (activeTab === '#register') {
+                startVideoStream(video);
+            } else if (activeTab === '#recognize') {
+                startVideoStream(videoRecognize);
+                startRecognition();
+            }
+        });
+    </script>
+</body>
+</html>
